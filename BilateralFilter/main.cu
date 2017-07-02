@@ -1,7 +1,6 @@
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/imgcodecs/imgcodecs.hpp>
-#include <iostream>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,8 +11,6 @@
 #include "kernel.h"
 #include "helperfunctions.h"
 
-//using namespace cv;
-//using namespace std;
 
 int main(int argc, char** argv)
 {
@@ -25,7 +22,7 @@ int main(int argc, char** argv)
 	int deviceCount;
 	cudaGetDeviceCount(&deviceCount);
 	if (deviceCount == 0) {
-		fprintf(stderr, "You don't have a CUDA enabled GPU. Buy one! Sorry.\n");
+		fprintf(stderr, "You don't have a CUDA capable GPU. Buy one! Sorry.\n");
 		return NO_DEVICE_ERROR;
 	}
 	cudaSetDevice(0);	//TODO:  csekkolni a hibát!!!
@@ -48,37 +45,72 @@ int main(int argc, char** argv)
 	int width = image.cols;
 	int height = image.rows;
 	int imageSize = width * height;
-	int spatialKernelSize = (2 * r + 1)*(2 * r + 1);
+	int n = 2 * r + 1;
+	int spatialKernelSize = n * n;
 	int rangeKernelSize = 511;
 
 	float *d_spatialKernel = NULL, *d_rangeKernel = NULL;
 	unsigned char *d_inputImage = NULL, *d_outputImage = NULL;
 
+	cudaEvent_t start, stop;
+	cudaEventCreate(&start);
+	cudaEventCreate(&stop);
+
+	cudaEventRecord(start, 0);
+
 	if (!doAllMallocs(d_spatialKernel, d_rangeKernel, d_inputImage, d_outputImage, spatialKernelSize, rangeKernelSize, imageSize)) {
 		fprintf(stderr, "cudaMalloc failed!\n\n");
+		cudaEventDestroy(start);
+		cudaEventDestroy(stop);
 		return CUDA_MALLOC_ERROR;
 	}
 
-	createSpatialKernel<<<1, spatialKernelSize>>>(d_spatialKernel, r, sigma_s);
-	createRangeKernel<<<1, 511>>>(d_rangeKernel, sigma_r);
+	createSpatialKernel<<<dim3(n, n), 1>>>(d_spatialKernel, r, sigma_s);
 
-	cudaMemcpy(d_inputImage, image.data, imageSize * sizeof(unsigned char), cudaMemcpyHostToDevice);
+	createRangeKernel<<<1, rangeKernelSize>>>(d_rangeKernel, sigma_r);
+
+	if (cudaMemcpy(d_inputImage, image.data, imageSize * sizeof(unsigned char), cudaMemcpyHostToDevice) != cudaSuccess) {
+		fprintf(stderr, "cudaMalloc failed!\n\n");
+		freeEverything(d_spatialKernel, d_rangeKernel, d_inputImage, d_outputImage);
+		cudaEventDestroy(start);
+		cudaEventDestroy(stop);
+		return CUDA_MEMCPY_ERROR;
+	}
 
 	int blocksX = (width + threads - 1) / threads;
 	int blocksY = (height + threads - 1) / threads;
-
 	int sharedMemSize = (spatialKernelSize + rangeKernelSize) * sizeof(float);
 
 	bilateralFilter<<<dim3(blocksX, blocksY), dim3(threads, threads), sharedMemSize >>>
 		(d_inputImage, d_outputImage, d_spatialKernel, d_rangeKernel, r, width, height);
 
-	cudaMemcpy(image.data, d_outputImage, imageSize * sizeof(unsigned char), cudaMemcpyDeviceToHost);
+	if (cudaMemcpy(image.data, d_outputImage, imageSize * sizeof(unsigned char), cudaMemcpyDeviceToHost) != cudaSuccess) {
+		fprintf(stderr, "cudaMalloc failed!\n\n");
+		freeEverything(d_spatialKernel, d_rangeKernel, d_inputImage, d_outputImage);
+		cudaEventDestroy(start);
+		cudaEventDestroy(stop);
+		return CUDA_MEMCPY_ERROR;
+	}
 
-	cv::imwrite(argv[2], image);
+	cudaEventRecord(stop, 0);
+	cudaEventSynchronize(stop);
 
-	cudaFree(d_inputImage);
-	cudaFree(d_outputImage);
-	cudaFree(d_spatialKernel);
-	cudaFree(d_rangeKernel);
-	return 0;
+	float elapsedTime;
+	cudaEventElapsedTime(&elapsedTime, start, stop);
+
+	printf("Execution time: %f ms\n"
+			"with parameters: sigma_s = %f, sigma_r = %f, spatial kernel radius = %d, number of threads per block dim = %d\n\n",
+			elapsedTime, sigma_s, sigma_r, r, threads);
+
+	cudaEventDestroy(start);
+	cudaEventDestroy(stop);
+
+	if (!cv::imwrite(argv[2], image)) {
+		fprintf(stderr, "Fail saving the processed image.\n\n");
+		freeEverything(d_spatialKernel, d_rangeKernel, d_inputImage, d_outputImage);
+		return NO_IMAGE_ERROR;
+	}
+
+	freeEverything(d_spatialKernel, d_rangeKernel, d_inputImage, d_outputImage);
+	return 0;	//csak akkor tér vissza 0-val, ha minden rendben ment
 }

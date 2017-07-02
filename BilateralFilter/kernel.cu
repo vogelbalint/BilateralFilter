@@ -11,15 +11,16 @@ __device__ float gauss(float x_square, float sigma)
 	return expf(-x_square / (2 * sigma * sigma));
 }
 
-//ekõtte le kell foglalni cudaMalloc-kal, spatialKernel egy device pointer
+//elõtte le kell foglalni cudaMalloc-kal, spatialKernel egy device pointer
 __global__ void createSpatialKernel(float *spatialKernel, int r, float sigma)
 {
 	int n = 2 * r + 1;		//a kernel oldalának hossza
-	int i = threadIdx.x - r;	//oszlop index a spatial kernelben
-	int j = threadIdx.y - r;	//sor index a spatial kernelben
+	int i = blockIdx.x - r;	//oszlop index a spatial kernelben
+	int j = blockIdx.y - r;	//sor index a spatial kernelben
 	float x_square = (float)(i * i + j * j);
-	spatialKernel[threadIdx.x + n * threadIdx.y] = gauss(x_square, sigma);
+	spatialKernel[blockIdx.x + n * blockIdx.y] = gauss(x_square, sigma);
 }
+
 
 //rangeKernel: mérete: 255 * 2 + 1 = 511
 //TODO magic numbers, gányolás eltûntetése
@@ -79,30 +80,19 @@ __global__ void bilateralFilter(unsigned char *in, unsigned char *out, float *sp
 
 			for (int i = -r; i <= r; ++i) {		//i: oszlopindex
 				int xi = x + i;					//az aktuálisan vizsgált pixel x koordinátája
-												//printf("%d %d %d %d\n", x, y, xi, yj);
 
 				if (xi >= 0 && xi < width && yj >= 0 && yj < height) {
 					int offsetij = xi + yj * blockDim.x * gridDim.x;	//az xi , yj pixel intenzitását tároló memória indexe
-
-																		//int offsetij = xi + yj * blockDim.x * gridDim.x;
-																		//if (offsetij < height *width) {
-
 					int intensityij = in[offsetij];						//az xi, yj pixel intenzitása
 					int deltaI = intensityij - intensity;
 					float temp = pSpatialKernel[i + j * n] * pRangeKernel[deltaI];
-					//float temp = sharedData[(i + r) + (j + r) * n] * sharedData[spatialKernelSize + 255 + deltaI];
 					weightSumma += temp;
 					summa += temp * intensityij;
-
-					//printf("%f %f\n", summa, weightSumma);
 				}
 			}
 		}
-		//printf("%f %f\n", summa, weightSumma);
-		//out[offset] = (in[offset] + 100 < 256) ? (in[offset] + 100) : 255;
+
 		out[offset] = (unsigned char)(summa / weightSumma);
-		//out[offset] = (in[offset] + 100 < 256) ? (in[offset] + 100) : 255;
-		//out[offset] = (summa > 255) ? 255 : ((summa < 0) ? 128 : summa);
 	}
 }
 

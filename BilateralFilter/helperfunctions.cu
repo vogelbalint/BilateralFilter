@@ -72,35 +72,40 @@ int readConfigParameters(int argc, char **argv, float & sigma_s, float & sigma_r
 	return 0;
 }
 
+void freeEverything(float *d_spatialKernel, float *d_rangeKernel, unsigned char *d_inputImage, unsigned char *d_outputImage)
+{
+	cudaFree(d_spatialKernel);
+	cudaFree(d_rangeKernel);
+	cudaFree(d_inputImage);
+	cudaFree(d_outputImage);
+}
+
 bool doAllMallocs(float * & d_spatialKernel, float * & d_rangeKernel, unsigned char * & d_inputImage, unsigned char * & d_outputImage,
 					int spatialKernelSize, int rangeKernelSize, int imageSize)
 {
 	if (cudaMalloc((void**)&d_spatialKernel, spatialKernelSize * sizeof(float)) != cudaSuccess) {
 		d_spatialKernel = NULL;
-		goto Error;
+		freeEverything(d_spatialKernel, d_rangeKernel, d_inputImage, d_outputImage);
+		return false;
 	}
 
 	if (cudaMalloc((void**)&d_rangeKernel, rangeKernelSize * sizeof(float)) != cudaSuccess) {
 		d_rangeKernel = NULL;
-		goto Error;
+		freeEverything(d_spatialKernel, d_rangeKernel, d_inputImage, d_outputImage);
+		return false;
 	}
 	
 	if (cudaMalloc((void**)&d_inputImage, imageSize * sizeof(unsigned char)) != cudaSuccess) {
 		d_inputImage = NULL;
-		goto Error;
+		freeEverything(d_spatialKernel, d_rangeKernel, d_inputImage, d_outputImage);
+		return false;
 	}
 
 	if (cudaMalloc((void**)&d_outputImage, imageSize * sizeof(unsigned char)) != cudaSuccess) {
 		d_outputImage = NULL;
-		goto Error;
+		freeEverything(d_spatialKernel, d_rangeKernel, d_inputImage, d_outputImage);
+		return false;
 	}
 
 	return true;
-
-Error:
-	cudaFree(d_spatialKernel);
-	cudaFree(d_rangeKernel);
-	cudaFree(d_inputImage);
-	cudaFree(d_outputImage);
-	return false;
 }
