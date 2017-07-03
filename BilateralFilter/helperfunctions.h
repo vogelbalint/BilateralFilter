@@ -3,9 +3,6 @@
 
 #include <stdio.h>  //A FILE* miatt
 
-
-
-
 #define NO_DEVICE_ERROR 1
 #define ARGUMENT_ERROR 2
 #define NO_IMAGE_ERROR 3

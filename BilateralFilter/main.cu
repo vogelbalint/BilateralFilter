@@ -14,7 +14,7 @@
 
 int main(int argc, char** argv)
 {
-	//Ha a help argementummal indítjuk a programot, ismertetjük a program mûködését.
+	//Ha a help argumentummal indítjuk a programot, ismertetjük a program mûködését.
 	if (argc == 2 && strcmp("help", argv[1]) == 0) {
 		printHelpMessage(stdout);
 		return 0;
@@ -28,7 +28,7 @@ int main(int argc, char** argv)
 	}
 	cudaSetDevice(0);	//TODO:  csekkolni a hibát?????
 
-	float sigma_s, sigma_r;		//a megfelelõ Gaudd függvények paraméterei
+	float sigma_s, sigma_r;		//a megfelelõ Gauss függvények paraméterei
 	int r, threads;				//r: a spatial kernel sugara, threads: a blokkonkénti thread-ek száma adott dimenzióban
 
 	int returnValue = readConfigParameters(argc, argv, sigma_s, sigma_r, r, threads);
@@ -78,7 +78,7 @@ int main(int argc, char** argv)
 
 	//a képe másolása a device-ra.
 	if (cudaMemcpy(d_inputImage, image.data, imageSize * sizeof(unsigned char), cudaMemcpyHostToDevice) != cudaSuccess) {
-		fprintf(stderr, "cudaMalloc failed!\n\n");
+		fprintf(stderr, "cudaMemcpy failed!\n\n");
 		freeEverything(d_spatialKernel, d_rangeKernel, d_inputImage, d_outputImage);
 		cudaEventDestroy(start);
 		cudaEventDestroy(stop);
@@ -99,7 +99,7 @@ int main(int argc, char** argv)
 		(d_inputImage, d_outputImage, d_spatialKernel, d_rangeKernel, r, width, height);
 
 	if (cudaMemcpy(image.data, d_outputImage, imageSize * sizeof(unsigned char), cudaMemcpyDeviceToHost) != cudaSuccess) {
-		fprintf(stderr, "cudaMalloc failed!\n\n");
+		fprintf(stderr, "cudaMemcpy failed!\n\n");
 		freeEverything(d_spatialKernel, d_rangeKernel, d_inputImage, d_outputImage);
 		cudaEventDestroy(start);
 		cudaEventDestroy(stop);
@@ -112,8 +112,8 @@ int main(int argc, char** argv)
 	float elapsedTime;		//Mérjük, hogy mennyi ideig tartott a GPU specifikus utasítások végrehajtása.
 	cudaEventElapsedTime(&elapsedTime, start, stop);
 
-	printf("Execution time: %f ms\n"
-			"with parameters: sigma_s = %f, sigma_r = %f, spatial kernel radius = %d, number of threads per block dim = %d\n\n",
+	printf("Execution time: %3.1f ms\n"
+		   "with parameters: sigma_s = %3.1f, sigma_r = %3.1f, spatial kernel radius = %d, number of threads per block dim = %d\n\n",
 			elapsedTime, sigma_s, sigma_r, r, threads);
 
 	cudaEventDestroy(start);
